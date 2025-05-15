@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: #f8f5ff;
+}
+
+.gradient-bg {
+    background: linear-gradient(135deg, #8a2be2 0%, #9932cc 50%, #9370db 100%);
+}
+
+.input-focus:focus {
+    box-shadow: 0 0 0 3px rgba(147, 112, 219, 0.3);
+    border-color: #9370db;
+}
+
+.btn-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px -10px rgba(147, 112, 219, 0.6);
+}
+
+.fashion-icon {
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+}
