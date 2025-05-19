@@ -12,37 +12,63 @@ function Explore() {
     const [preview, setPreview] = useState(null);
     const fileInputRef = useRef(null);
     const searchInput = useRef(null);
+    const descriptionRef = useRef(null);
+    const tagsInputRef = useRef(null);
     const [images, setImages] = useState([]);
     const [totalPages, setTotalPages] = useState(0);
     const [isFavorite, setIsFavorite] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [loading, setLoading] = useState(false);
+    const [selectedTags, setSelectedTags] = useState(['Streetwear']);
+    const [uploadedFile, setUploadedFile] = useState(null);
+    const [modalVisible, setModalVisible] = useState(false);
 
 
-    const fetchImages = async () => {
+    const fetchImages = async (page = 1) => {
         try {
-            const {data} = await axios.get(
+            setLoading(true);
+            const { data } = await axios.get(
                 `${API_URL}?query=${
-                    searchInput.current.value
-                }&page=1&per_page=${IMAGES_PER_PAGE}&client_id=${
+                    searchInput.current.value || selectedFilter
+                }&page=${page}&per_page=${IMAGES_PER_PAGE}&client_id=${
                     process.env.REACT_APP_API_KEY
                 }`
             );
-            setImages(data.results);
+            
+            if (page === 1) {
+                setImages(data.results);
+            } else {
+                setImages(prevImages => [...prevImages, ...data.results]);
+            }
+            
             setTotalPages(data.total_pages);
+            setLoading(false);
         } catch (error) {
             console.log(error);
+            setLoading(false);
         }
     }
+
+    const handleLoadMore = () => {
+        const nextPage = currentPage + 1;
+        if (nextPage <= totalPages) {
+            setCurrentPage(nextPage);
+            fetchImages(nextPage);
+        }
+    };
 
     const handleSearch = (event) => {
         event.preventDefault();
         console.log(searchInput.current.value);
-        fetchImages();
+        setCurrentPage(1);
+        fetchImages(1);
     }
 
     const handleSelection = (selection) => {
         setSelectedFilter(selection);
         searchInput.current.value = selection;
-        fetchImages();
+        setCurrentPage(1);
+        fetchImages(1);
     }
 
     const preventDefaults = (e) => {
@@ -67,37 +93,54 @@ function Explore() {
     };
     
     const handleFiles = (files) => {
-    if (files.length) {
-        const file = files[0];
-        if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            setPreview(e.target.result);
-        };
-        reader.readAsDataURL(file);
-        } else {
-        alert('Please select an image file.');
+        if (files.length) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    setPreview(e.target.result);
+                    setUploadedFile(file);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                alert('Please select an image file.');
+            }
         }
-    }
     };
     
     const handleClick = () => {
-    fileInputRef.current.click();
+        fileInputRef.current.click();
     };
     
     const handleChange = (e) => {
-    handleFiles(e.target.files);
+        handleFiles(e.target.files);
     };
 
     const closeModalBtn = () => {
-        document.getElementById('uploadModal').style.display = 'none';
+        setModalVisible(false);
+        // Reset the form data
+        setPreview(null);
+        setUploadedFile(null);
+        setSelectedTags(['Streetwear']);
+        if (descriptionRef.current) descriptionRef.current.value = '';
+        if (tagsInputRef.current) tagsInputRef.current.value = '';
     }
+
     const uploadModalBtn = (e) => {
         if (e.target === document.getElementById('uploadModal')) {
-            document.getElementById('uploadModal').display = 'none';
+            setModalVisible(false);
         }
     }
-    const [selectedFilter, setSelectedFilter] = useState('all');
+
+    const openModal = () => {
+        setModalVisible(true);
+    }
+
+    const [selectedFilter, setSelectedFilter] = useState('outfits');
+
+    useEffect(() => {
+        fetchImages(1);
+    }, []);
 
     const filters = [
         { value: 'outfits', label: 'All' },
@@ -109,12 +152,69 @@ function Explore() {
         { value: 'sporty outfits', label: 'Sporty' }
     ];
 
-    const handleAddToFavorites = () => {
+    const handleAddToFavorites = (imageId) => {
+        // In a real app, you would store this in state or context with the specific image ID
         setIsFavorite(true);
     };
 
-    const handleRemoveFromFavorites = () => {
+    const handleRemoveFromFavorites = (imageId) => {
+        // In a real app, you would remove this specific image ID from state or context
         setIsFavorite(false);
+    };
+
+    const handleTagClick = (tag) => {
+        if (selectedTags.includes(tag)) {
+            setSelectedTags(selectedTags.filter(t => t !== tag));
+        } else {
+            setSelectedTags([...selectedTags, tag]);
+        }
+    };
+
+    const handleAddTag = () => {
+        if (tagsInputRef.current && tagsInputRef.current.value.trim()) {
+            const newTag = tagsInputRef.current.value.trim();
+            if (!selectedTags.includes(newTag)) {
+                setSelectedTags([...selectedTags, newTag]);
+                tagsInputRef.current.value = '';
+            }
+        }
+    };
+
+    const handleTagInputKeyPress = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddTag();
+        }
+    };
+
+    const handleShareLook = () => {
+        if (!preview) {
+            alert('Please select an image first');
+            return;
+        }
+
+        // Create a new image object to add to the grid
+        const newImage = {
+            id: `user-upload-${Date.now()}`,
+            alt_description: descriptionRef.current ? descriptionRef.current.value : 'User uploaded image',
+            urls: {
+                small: preview
+            },
+            user: {
+                username: 'me'  // This could be the actual username in a real app
+            },
+            isUserUploaded: true,
+            tags: [...selectedTags]
+        };
+
+        // Add the new image to the beginning of the images array
+        setImages(prevImages => [newImage, ...prevImages]);
+        
+        // Close the modal and reset form
+        closeModalBtn();
+        
+        // Show success message
+        alert('Your look has been shared successfully!');
     };
 
 
@@ -154,19 +254,19 @@ function Explore() {
                             <div className="space-y-2">
                                 <div className="flex items-center">
                                     <input id="streetwear" name="streetwear" type="checkbox" className="h-4 w-4 text-purple-500 focus:ring-purple-500 border-gray-300 rounded"></input>
-                                    <label for="streetwear" className="ml-2 block text-sm text-gray-900">Streetwear</label>
+                                    <label htmlFor="streetwear" className="ml-2 block text-sm text-gray-900">Streetwear</label>
                                 </div>
                                 <div className="flex items-center">
                                     <input id="vintage" name="vintage" type="checkbox" className="h-4 w-4 text-purple-500 focus:ring-purple-500 border-gray-300 rounded"></input>
-                                    <label for="vintage" class="ml-2 block text-sm text-gray-900">Vintage</label>
+                                    <label htmlFor="vintage" className="ml-2 block text-sm text-gray-900">Vintage</label>
                                 </div>
                                 <div className="flex items-center">
                                     <input id="minimalist" name="minimalist" type="checkbox" className="h-4 w-4 text-purple-500 focus:ring-purple-500 border-gray-300 rounded"></input>
-                                    <label for="minimalist" className="ml-2 block text-sm text-gray-900">Minimalist</label>
+                                    <label htmlFor="minimalist" className="ml-2 block text-sm text-gray-900">Minimalist</label>
                                 </div>
                                 <div className="flex items-center">
                                     <input id="bohemian" name="bohemian" type="checkbox" className="h-4 w-4 text-purple-500 focus:ring-purple-500 border-gray-300 rounded"></input>
-                                    <label for="bohemian" className="ml-2 block text-sm text-gray-900">Bohemian</label>
+                                    <label htmlFor="bohemian" className="ml-2 block text-sm text-gray-900">Bohemian</label>
                                 </div>
                             </div>
                         </div>
@@ -211,7 +311,7 @@ function Explore() {
                             <i className="fas fa-search text-gray-400"></i>
                         </div>
                         <Form onSubmit={handleSearch}>
-                            <Form.Control type="search" placeholder="Type something to search" ref={searchInput} className="focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2" />
+                            <Form.Control type="search" placeholder="Type something to search" ref={searchInput} className=" focus:ring-purple-500 focus:border-purple-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2" />
                         </Form>
                     </div>
                 </div>
@@ -243,16 +343,25 @@ function Explore() {
                         ))}
                     </div>
                 </div>
+
+                <div className="text-center mb-6">
+                    <button 
+                        onClick={openModal}
+                        className="inline-flex items-center px-6 py-3 bg-purple-500 text-white font-medium rounded-full hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                    >
+                        <i className="fas fa-upload mr-2"></i>
+                        Upload Your Look
+                    </button>
+                </div>
             </section>
 
             <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                 <div className="home-masonry">
                     {
-                        images.map(image => {
+                        images.map((image, index) => {
                             return(
-                                <div className="pin">
+                                <div className="pin" key={`${image.id}-${index}`}>
                                     <img 
-                                    key={image.id} 
                                     src={image.urls.small} 
                                     alt={image.alt_description}
                                     className="pin" 
@@ -260,12 +369,30 @@ function Explore() {
                                     <div className="pin-overlay">
                                         <div className="flex justify-between items-center">
                                             <div>
-                                                <h3 className="font-bold">Urban Street Style</h3>
-                                                <p className="text-sm">@fashionista23</p>
+                                                <h3 className="font-bold">
+                                                    {image.isUserUploaded ? 'My Look' : 'Urban Street Style'}
+                                                </h3>
+                                                <p className="text-sm">
+                                                    {image.isUserUploaded ? 'You' : '@fashionista23'}
+                                                </p>
+                                                {image.isUserUploaded && image.tags && (
+                                                    <div className="flex flex-wrap mt-1 gap-1">
+                                                        {image.tags.slice(0, 2).map((tag, tagIndex) => (
+                                                            <span key={tagIndex} className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs">
+                                                                {tag}
+                                                            </span>
+                                                        ))}
+                                                        {image.tags.length > 2 && (
+                                                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded-full text-xs">
+                                                                +{image.tags.length - 2}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                            <button 
                                             className="bg-white w-8 h-8 rounded-full flex justify-center items-center"
-                                            onClick={isFavorite ? handleRemoveFromFavorites : handleAddToFavorites}
+                                            onClick={isFavorite ? () => handleRemoveFromFavorites(image.id) : () => handleAddToFavorites(image.id)}
                                             aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
                                             >
                                                 {isFavorite ? (
@@ -283,73 +410,120 @@ function Explore() {
                 </div>
                 
                 <div className="mt-8 text-center">
-                    <button id="load-more" className="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-full font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500" >
-                        Load More
-                    </button>
+                    {currentPage < totalPages ? (
+                        <button 
+                            onClick={handleLoadMore}
+                            className="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-full font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                            disabled={loading}
+                        >
+                            {loading ? 'Loading...' : 'Load More'}
+                        </button>
+                    ) : images.length > 0 ? (
+                        <p className="text-gray-500">You've reached the end of the results</p>
+                    ) : null}
                 </div>
             </section>
 
-            <div id="uploadModal" className="upload-modal" onClick={uploadModalBtn}>
-                <div className="upload-content">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold text-gray-900">Upload Your Look</h2>
-                        <button id="closeModal" class="text-gray-400 hover:text-gray-500" onClick={closeModalBtn}>
-                            <i className="fas fa-times"></i>
-                        </button>
-                    </div>
-                    
-                    <div className="flex flex-col items-center">
-                    <div 
-                        className= 'drop-area'
-                        onDragEnter={preventDefaults}
-                        onDragOver={(e) => { preventDefaults(e); handleHighlight(); }}
-                        onDragLeave={(e) => { preventDefaults(e); handleUnhighlight(); }}
-                        onDrop={handleDrop}
-                        onClick={handleClick}
-                    >
-                        {preview ? (
-                        <img src={preview} className="max-h-56 max-w-full rounded-lg" alt="Preview" />
-                        ) : (
-                        <>
-                            <i class="fas fa-cloud-upload-alt text-4xl text-purple-500 mb-3"></i>
-                            <h3 class="text-lg font-medium text-gray-700">Drag & drop your photo here</h3>
-                            <p class="text-sm text-gray-500 mt-1">or click to browse files</p>
-                        </>
-                        )}
-                    </div>
-                    <input 
-                        type="file" 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        accept="image/*" 
-                        onChange={handleChange}
-                    />
-                    </div>
-                    
-                    <div className="mt-4">
-                        <label for="description" className="block text-sm font-medium text-gray-700">Description</label>
-                        <textarea id="description" rows="3" className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-400 focus:border-purple-400 sm:text-sm" placeholder="Tell us about your outfit..."></textarea>
-                    </div>
-                    
-                    <div className="mt-4">
-                        <label className="block text-sm font-medium text-gray-700">Tags</label>
-                        <div className="mt-1 flex flex-wrap gap-2">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">Streetwear</span>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Casual</span>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Formal</span>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Vintage</span>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Bohemian</span>
+            {modalVisible && (
+                <div id="uploadModal" className="upload-modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={uploadModalBtn}>
+                    <div className="upload-content bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-900">Upload Your Look</h2>
+                            <button id="closeModal" className="text-gray-400 hover:text-gray-500" onClick={closeModalBtn}>
+                                <i className="fas fa-times"></i>
+                            </button>
                         </div>
-                        <input type="text" className="mt-2 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-400 focus:border-purple-400 sm:text-sm" placeholder="Add more tags..."></input>
-                    </div>
-                    
-                    <div className="mt-6">
-                        <button type="button" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-500 hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-400">
-                            Share Your Look
-                        </button>
+                        
+                        <div className="flex flex-col items-center">
+                        <div 
+                            className={`drop-area border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer w-full h-56 ${highlight ? 'border-purple-500 bg-purple-50' : 'border-gray-300 hover:border-purple-400'}`}
+                            onDragEnter={preventDefaults}
+                            onDragOver={(e) => { preventDefaults(e); handleHighlight(); }}
+                            onDragLeave={(e) => { preventDefaults(e); handleUnhighlight(); }}
+                            onDrop={handleDrop}
+                            onClick={handleClick}
+                        >
+                            {preview ? (
+                            <img src={preview} className="max-h-56 max-w-full rounded-lg" alt="Preview" />
+                            ) : (
+                            <>
+                                <i className="fas fa-cloud-upload-alt text-4xl text-purple-500 mb-3"></i>
+                                <h3 className="text-lg font-medium text-gray-700">Drag & drop your photo here</h3>
+                                <p className="text-sm text-gray-500 mt-1">or click to browse files</p>
+                            </>
+                            )}
+                        </div>
+                        <input 
+                            type="file" 
+                            ref={fileInputRef} 
+                            className="hidden" 
+                            accept="image/*" 
+                            onChange={handleChange}
+                        />
+                        </div>
+                        
+                        <div className="mt-4">
+                            <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
+                            <textarea 
+                                id="description" 
+                                ref={descriptionRef}
+                                rows="3" 
+                                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-400 focus:border-purple-400 sm:text-sm" 
+                                placeholder="Tell us about your outfit..."
+                            ></textarea>
+                        </div>
+                        
+                        <div className="mt-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                                {['Streetwear', 'Casual', 'Formal', 'Vintage', 'Bohemian'].map(tag => (
+                                    <span 
+                                        key={tag}
+                                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
+                                            selectedTags.includes(tag) 
+                                                ? 'bg-purple-100 text-purple-700' 
+                                                : 'bg-gray-100 text-gray-800'
+                                        }`}
+                                        onClick={() => handleTagClick(tag)}
+                                    >
+                                        {tag}
+                                        {selectedTags.includes(tag) && (
+                                            <span className="ml-1 text-purple-500">✓</span>
+                                        )}
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="flex mt-2">
+                                <input 
+                                    type="text" 
+                                    ref={tagsInputRef}
+                                    className="flex-grow border border-gray-300 rounded-l-md shadow-sm py-2 px-3 focus:outline-none focus:ring-purple-400 focus:border-purple-400 sm:text-sm" 
+                                    placeholder="Add more tags..."
+                                    onKeyPress={handleTagInputKeyPress}
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={handleAddTag}
+                                    className="px-3 py-2 bg-gray-100 border border-gray-300 border-l-0 rounded-r-md text-gray-700 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                >
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="mt-6">
+                            <button 
+                                type="button" 
+                                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-500 hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-400"
+                                onClick={handleShareLook}
+                                disabled={!preview}
+                            >
+                                Share Your Look
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             <footer className="bg-white">
                 <div className="max-w-7xl mx-auto py-12 px-4 overflow-hidden sm:px-6 lg:px-8">
